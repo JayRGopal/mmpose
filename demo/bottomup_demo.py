@@ -147,10 +147,7 @@ def main():
 
         if args.save_predictions:
             pred_instances_list = split_instances(pred_instances)
-
-        if output_file:
-            img_vis = visualizer.get_image()
-            mmcv.imwrite(mmcv.rgb2bgr(img_vis), output_file)
+        
 
     elif input_type in ['webcam', 'video']:
 
@@ -179,22 +176,7 @@ def main():
                     dict(
                         frame_id=frame_idx,
                         instances=split_instances(pred_instances)))
-
-            # output videos
-            if output_file:
-                frame_vis = visualizer.get_image()
-
-                if video_writer is None:
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                    # the size of the image with visualization may vary
-                    # depending on the presence of heatmaps
-                    video_writer = cv2.VideoWriter(
-                        output_file,
-                        fourcc,
-                        25,  # saved fps
-                        (frame_vis.shape[1], frame_vis.shape[0]))
-
-                video_writer.write(mmcv.rgb2bgr(frame_vis))
+            
 
             # press ESC to exit
             if cv2.waitKey(5) & 0xFF == 27:
