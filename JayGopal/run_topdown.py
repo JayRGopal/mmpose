@@ -90,7 +90,13 @@ def main():
         '--output-root',
         type=str,
         default='',
-        help='root of the output img file. '
+        help='root of the output json file. '
+        'Default not saving the json with body keypoints.')
+    parser.add_argument(
+        '--output-video',
+        type=str,
+        default='',
+        help='root of the output video file with keypoints overlayed. '
         'Default not saving the visualization images.')
     parser.add_argument(
         '--save-predictions',
@@ -164,10 +170,13 @@ def main():
     output_file = None
     if args.output_root:
         mmengine.mkdir_or_exist(args.output_root)
-        output_file = os.path.join(args.output_root,
+
+    if args.output_video:
+       mmengine.mkdir_or_exist(args.output_video)
+       output_file = os.path.join(args.output_video,
                                    os.path.basename(args.input))
-        if args.input == 'webcam':
-            output_file += '.mp4'
+       if args.input == 'webcam':
+            output_file += '.mp4' 
 
     if args.save_predictions:
         assert args.output_root != ''
@@ -210,7 +219,10 @@ def main():
 
         if args.save_predictions:
             pred_instances_list = split_instances(pred_instances)
-
+        
+        if output_file:
+            img_vis = visualizer.get_image()
+            mmcv.imwrite(mmcv.rgb2bgr(img_vis), output_file)
 
     elif input_type in ['webcam', 'video']:
 
@@ -242,6 +254,21 @@ def main():
                         frame_id=frame_idx,
                         instances=split_instances(pred_instances)))
 
+            if output_file:
+                frame_vis = visualizer.get_image()
+
+                if video_writer is None:
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    # the size of the image with visualization may vary
+                    # depending on the presence of heatmaps
+                    video_writer = cv2.VideoWriter(
+                        output_file,
+                        fourcc,
+                        30,  # saved fps
+                        (frame_vis.shape[1], frame_vis.shape[0]))
+
+                video_writer.write(mmcv.rgb2bgr(frame_vis))
+
             # press ESC to exit
             if cv2.waitKey(5) & 0xFF == 27:
                 break
@@ -271,3 +298,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
