@@ -286,13 +286,30 @@ def main():
             f'file {os.path.basename(args.input)} has invalid format.')
 
     if args.save_predictions:
-        with open(args.pred_save_path, 'w') as f:
-            json.dump(
-                dict(
-                    meta_info=pose_estimator.dataset_meta,
-                    instance_info=pred_instances_list),
-                f,
-                indent='\t')
+        try:
+            with open(args.pred_save_path, 'x') as f:
+                json.dump(
+                    dict(
+                        meta_info=pose_estimator.dataset_meta,
+                        instance_info=pred_instances_list),
+                    f,
+                    indent='\t')
+        except FileExistsError:
+            with open(args.pred_save_path, 'w') as f:
+                json.dump(
+                    dict(
+                        meta_info=pose_estimator.dataset_meta,
+                        instance_info=pred_instances_list),
+                    f,
+                    indent='\t')
+        
+        # with open(args.pred_save_path, 'w') as f:
+        #     json.dump(
+        #         dict(
+        #             meta_info=pose_estimator.dataset_meta,
+        #             instance_info=pred_instances_list),
+        #         f,
+        #         indent='\t')
         print(f'predictions have been saved at {args.pred_save_path}')
 
 
