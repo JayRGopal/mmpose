@@ -91,6 +91,17 @@ The inferencer is capable of processing a range of input types, which includes t
 - A list of image arrays (NA for CLI tool)
 - A webcam (in which case the `input` parameter should be set to either `'webcam'` or `'webcam:{CAMERA_ID}'`)
 
+Please note that when the input corresponds to multiple images, such as when the input is a video or a folder path, the inference process needs to iterate over the results generator in order to perform inference on all the frames or images within the folder. Here's an example in Python:
+
+```python
+folder_path = 'tests/data/coco'
+
+result_generator = inferencer(folder_path, show=True)
+results = [result for result in result_generator]
+```
+
+In this example, the `inferencer` takes the `folder_path` as input and returns a generator object (`result_generator`) that produces inference results. By iterating over the `result_generator` and storing each result in the `results` list, you can obtain the inference results for all the frames or images within the folder.
+
 ### Custom Pose Estimation Models
 
 The inferencer provides several methods that can be used to customize the models employed:
@@ -263,9 +274,9 @@ The MMPose library has predefined aliases for several frequently used models. Th
 
 The following table lists the available 3D model aliases and their corresponding configuration names:
 
-| Alias   | Configuration Name                                     | Task                     | 3D Pose Estimator | 2D Pose Estimator | Detector |
-| ------- | ------------------------------------------------------ | ------------------------ | ----------------- | ----------------- | -------- |
-| human3d | vid-pl_videopose3d-243frm-supv-cpn-ft_8xb128-200e_h36m | Human 3D pose estimation | VideoPose3D       | RTMPose-m         | RTMDet-m |
+| Alias   | Configuration Name                                        | Task                     | 3D Pose Estimator | 2D Pose Estimator | Detector |
+| ------- | --------------------------------------------------------- | ------------------------ | ----------------- | ----------------- | -------- |
+| human3d | pose-lift_videopose3d-243frm-supv-cpn-ft_8xb128-200e_h36m | Human 3D pose estimation | VideoPose3D       | RTMPose-m         | RTMDet-m |
 
 In addition, users can utilize the CLI tool to display all available aliases with the following command:
 
