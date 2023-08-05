@@ -10,6 +10,13 @@ import mmcv
 import mmengine
 import numpy as np
 
+# # Face detection imports
+# import sys
+# cwd=os.getcwd()
+# sys.path.append(os.path.join(cwd, "../.."))
+# from utilsHSE import *
+
+# Pose tracking imports
 from mmpose.apis import inference_topdown
 from mmpose.apis import init_model as init_pose_estimator
 from mmpose.evaluation.functional import nms
@@ -286,13 +293,30 @@ def main():
             f'file {os.path.basename(args.input)} has invalid format.')
 
     if args.save_predictions:
-        with open(args.pred_save_path, 'w') as f:
-            json.dump(
-                dict(
-                    meta_info=pose_estimator.dataset_meta,
-                    instance_info=pred_instances_list),
-                f,
-                indent='\t')
+        try:
+            with open(args.pred_save_path, 'x') as f:
+                json.dump(
+                    dict(
+                        meta_info=pose_estimator.dataset_meta,
+                        instance_info=pred_instances_list),
+                    f,
+                    indent='\t')
+        except FileExistsError:
+            with open(args.pred_save_path, 'w') as f:
+                json.dump(
+                    dict(
+                        meta_info=pose_estimator.dataset_meta,
+                        instance_info=pred_instances_list),
+                    f,
+                    indent='\t')
+        
+        # with open(args.pred_save_path, 'w') as f:
+        #     json.dump(
+        #         dict(
+        #             meta_info=pose_estimator.dataset_meta,
+        #             instance_info=pred_instances_list),
+        #         f,
+        #         indent='\t')
         print(f'predictions have been saved at {args.pred_save_path}')
 
 

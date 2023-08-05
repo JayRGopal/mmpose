@@ -10,9 +10,19 @@ import mmcv
 import mmengine
 import numpy as np
 
+# Jay's imports
 from mmpose.apis import inference_bottomup, init_model
 from mmpose.registry import VISUALIZERS
 from mmpose.structures import split_instances
+
+
+# Jeff's imports
+# from mmpose.apis import (get_track_id, inference_bottom_up_pose_model,
+#                          init_pose_model, vis_pose_tracking_result)
+# from mmpose.apis import (collect_multi_frames, inference_top_down_pose_model)
+# from mmtrack.apis import inference_mot
+# from mmtrack.apis import init_model as init_tracking_model
+
 
 
 def process_one_image(args,
@@ -21,6 +31,21 @@ def process_one_image(args,
                       visualizer=None,
                       show_interval=0):
     """Visualize predicted keypoints (and heatmaps) of one image."""
+
+    # # New bottom up inference
+    # dataset = pose_estimator.cfg.data['test']['type']
+    # dataset_info = pose_estimator.cfg.data['test'].get('dataset_info', None)
+
+    # batch_results, _ = inference_bottom_up_pose_model(
+    #             pose_estimator,
+    #             img,
+    #             dataset=dataset,
+    #             dataset_info=dataset_info,
+    #             pose_nms_thr=0.9,
+    #             return_heatmap=False,
+    #             outputs=None)
+    # results = batch_results[0]
+
 
     # inference a single image
     batch_results = inference_bottomup(pose_estimator, img)
@@ -66,6 +91,12 @@ def parse_args():
         help='root of the output img file. '
         'Default not saving the visualization images.')
     parser.add_argument(
+        '--output-video',
+        type=str,
+        default='',
+        help='root of the output video file with keypoints overlayed. '
+        'Default not saving the visualization images.')
+    parser.add_argument(
         '--save-predictions',
         action='store_true',
         default=False,
@@ -107,10 +138,13 @@ def main():
     output_file = None
     if args.output_root:
         mmengine.mkdir_or_exist(args.output_root)
-        output_file = os.path.join(args.output_root,
+
+    if args.output_video:
+       mmengine.mkdir_or_exist(args.output_video)
+       output_file = os.path.join(args.output_video,
                                    os.path.basename(args.input))
-        if args.input == 'webcam':
-            output_file += '.mp4'
+       if args.input == 'webcam':
+            output_file += '.mp4' 
 
     if args.save_predictions:
         assert args.output_root != ''
@@ -148,6 +182,10 @@ def main():
         if args.save_predictions:
             pred_instances_list = split_instances(pred_instances)
         
+        if output_file:
+            img_vis = visualizer.get_image()
+            mmcv.imwrite(mmcv.rgb2bgr(img_vis), output_file)
+        
 
     elif input_type in ['webcam', 'video']:
 
@@ -177,8 +215,21 @@ def main():
                         frame_id=frame_idx,
                         instances=split_instances(pred_instances)))
             
+            if output_file:
+                frame_vis = visualizer.get_image()
 
+                if video_writer is None:
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    # the size of the image with visualization may vary
+                    # depending on the presence of heatmaps
+                    video_writer = cv2.VideoWriter(
+                        output_file,
+                        fourcc,
+                        30,  # saved fps
+                        (frame_vis.shape[1], frame_vis.shape[0]))
 
+                video_writer.write(mmcv.rgb2bgr(frame_vis))
+            
             # press ESC to exit
             if cv2.waitKey(5) & 0xFF == 27:
                 break
