@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import logging
 import os
 import warnings
 from collections import defaultdict
@@ -12,6 +13,7 @@ import torch
 from mmengine.config import Config, ConfigDict
 from mmengine.fileio import join_path
 from mmengine.infer.infer import ModelType
+from mmengine.logging import print_log
 from mmengine.model import revert_sync_batchnorm
 from mmengine.registry import init_default_scope
 from mmengine.structures import InstanceData
@@ -67,9 +69,9 @@ class Pose3DInferencer(BaseMMPoseInferencer):
 
     preprocess_kwargs: set = {
         'bbox_thr', 'nms_thr', 'bboxes', 'use_oks_tracking', 'tracking_thr',
-        'norm_pose_2d'
+        'disable_norm_pose_2d'
     }
-    forward_kwargs: set = {'rebase_keypoint_height'}
+    forward_kwargs: set = {'disable_rebase_keypoint'}
     visualize_kwargs: set = {
         'return_vis',
         'show',
@@ -77,6 +79,7 @@ class Pose3DInferencer(BaseMMPoseInferencer):
         'draw_bbox',
         'radius',
         'thickness',
+        'num_instances',
         'kpt_thr',
         'vis_out_dir',
     }
@@ -132,7 +135,7 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                                         np.ndarray] = [],
                           use_oks_tracking: bool = False,
                           tracking_thr: float = 0.3,
-                          norm_pose_2d: bool = False):
+                          disable_norm_pose_2d: bool = False):
         """Process a single input into a model-feedable format.
 
         Args:
@@ -149,8 +152,9 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                 whether OKS-based tracking should be used. Defaults to False.
             tracking_thr (float, optional): The threshold for tracking.
                 Defaults to 0.3.
-            norm_pose_2d (bool, optional): A flag that indicates whether 2D
-                pose normalization should be used. Defaults to False.
+            disable_norm_pose_2d (bool, optional): A flag that indicates
+                whether 2D pose normalization should be used.
+                Defaults to False.
 
         Yields:
             Any: The data processed by the pipeline and collate_fn.
@@ -238,7 +242,7 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                 keypoints = []
                 for k in range(len(kpts)):
                     kpt = kpts[k]
-                    if norm_pose_2d:
+                    if not disable_norm_pose_2d:
                         bbox = bboxes[k]
                         center = np.array([[(bbox[0] + bbox[2]) / 2,
                                             (bbox[1] + bbox[3]) / 2]])
@@ -271,8 +275,9 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                 K,
             ),
                                                      dtype=np.float32)
-            data_info['lifting_target'] = np.zeros((K, 3), dtype=np.float32)
-            data_info['lifting_target_visible'] = np.ones((K, 1),
+            data_info['lifting_target'] = np.zeros((1, K, 3), dtype=np.float32)
+            data_info['factor'] = np.zeros((T, ), dtype=np.float32)
+            data_info['lifting_target_visible'] = np.ones((1, K, 1),
                                                           dtype=np.float32)
             data_info['camera_param'] = dict(w=width, h=height)
 
@@ -287,19 +292,18 @@ class Pose3DInferencer(BaseMMPoseInferencer):
     @torch.no_grad()
     def forward(self,
                 inputs: Union[dict, tuple],
-                rebase_keypoint_height: bool = False):
+                disable_rebase_keypoint: bool = False):
         """Perform forward pass through the model and process the results.
 
         Args:
             inputs (Union[dict, tuple]): The inputs for the model.
-            rebase_keypoint_height (bool, optional): Flag to rebase the
-                height of the keypoints (z-axis). Defaults to False.
+            disable_rebase_keypoint (bool, optional): Flag to disable rebasing
+                the height of the keypoints. Defaults to False.
 
         Returns:
             list: A list of data samples, each containing the model's output
                 results.
         """
-
         pose_lift_results = self.model.test_step(inputs)
 
         # Post-processing of pose estimation results
@@ -309,14 +313,22 @@ class Pose3DInferencer(BaseMMPoseInferencer):
             pose_lift_res.track_id = pose_est_results_converted[idx].get(
                 'track_id', 1e4)
 
-            # Invert x and z values of the keypoints
+            # align the shape of output keypoints coordinates and scores
             keypoints = pose_lift_res.pred_instances.keypoints
+            keypoint_scores = pose_lift_res.pred_instances.keypoint_scores
+            if keypoint_scores.ndim == 3:
+                pose_lift_results[idx].pred_instances.keypoint_scores = \
+                    np.squeeze(keypoint_scores, axis=1)
+            if keypoints.ndim == 4:
+                keypoints = np.squeeze(keypoints, axis=1)
+
+            # Invert x and z values of the keypoints
             keypoints = keypoints[..., [0, 2, 1]]
             keypoints[..., 0] = -keypoints[..., 0]
             keypoints[..., 2] = -keypoints[..., 2]
 
             # If rebase_keypoint_height is True, adjust z-axis values
-            if rebase_keypoint_height:
+            if not disable_rebase_keypoint:
                 keypoints[..., 2] -= np.min(
                     keypoints[..., 2], axis=-1, keepdims=True)
 
@@ -381,6 +393,15 @@ class Pose3DInferencer(BaseMMPoseInferencer):
         else:
             inputs = self._inputs_to_list(inputs)
 
+        # check the compatibility between inputs/outputs
+        if not self._video_input and len(inputs) > 0:
+            vis_out_dir = visualize_kwargs.get('vis_out_dir', None)
+            if vis_out_dir is not None:
+                _, file_extension = os.path.splitext(vis_out_dir)
+                assert not file_extension, f'the argument `vis_out_dir` ' \
+                    f'should be a folder while the input contains multiple ' \
+                    f'images, but got {vis_out_dir}'
+
         inputs = self.preprocess(
             inputs, batch_size=batch_size, **preprocess_kwargs)
 
@@ -410,6 +431,7 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                   radius: int = 3,
                   thickness: int = 1,
                   kpt_thr: float = 0.3,
+                  num_instances: int = 1,
                   vis_out_dir: str = '',
                   window_name: str = '',
                   window_close_event_handler: Optional[Callable] = None
@@ -470,6 +492,9 @@ class Pose3DInferencer(BaseMMPoseInferencer):
             # thereby eliminating the issue of inference getting stuck.
             wait_time = 1e-5 if self._video_input else wait_time
 
+            if num_instances < 0:
+                num_instances = len(pred.pred_instances)
+
             visualization = self.visualizer.add_datasample(
                 window_name,
                 img,
@@ -479,7 +504,8 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                 draw_bbox=draw_bbox,
                 show=show,
                 wait_time=wait_time,
-                kpt_thr=kpt_thr)
+                kpt_thr=kpt_thr,
+                num_instances=num_instances)
             results.append(visualization)
 
             if vis_out_dir:
@@ -501,6 +527,7 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                             file_name = os.path.basename(
                                 self.video_info['name'])
                         out_file = join_path(dir_name, file_name)
+                        self.video_info['output_file'] = out_file
                         self.video_info['writer'] = cv2.VideoWriter(
                             out_file, fourcc, self.video_info['fps'],
                             (visualization.shape[1], visualization.shape[0]))
@@ -511,6 +538,10 @@ class Pose3DInferencer(BaseMMPoseInferencer):
                     file_name = file_name if file_name else img_name
                     out_file = join_path(dir_name, file_name)
                     mmcv.imwrite(out_img, out_file)
+                    print_log(
+                        f'the output image has been saved at {out_file}',
+                        logger='current',
+                        level=logging.INFO)
 
         if return_vis:
             return results

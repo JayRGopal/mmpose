@@ -51,8 +51,6 @@ def keypoints_to_tensor(keypoints: Union[np.ndarray, Sequence[np.ndarray]]
     """
     if isinstance(keypoints, np.ndarray):
         keypoints = np.ascontiguousarray(keypoints)
-        N = keypoints.shape[0]
-        keypoints = keypoints.transpose(1, 2, 0).reshape(-1, N)
         tensor = torch.from_numpy(keypoints).contiguous()
     else:
         assert is_seq_of(keypoints, np.ndarray)
@@ -130,7 +128,7 @@ class PackPoseInputs(BaseTransform):
         'keypoint_y_labels': 'keypoint_y_labels',
         'keypoint_weights': 'keypoint_weights',
         'instance_coords': 'instance_coords',
-        'transformed_keypoints_visible': 'keypoints_visible',
+        'keypoints_visible_weights': 'keypoints_visible_weights'
     }
 
     # items in `field_mapping_table` will be packed into
@@ -197,10 +195,6 @@ class PackPoseInputs(BaseTransform):
         if self.pack_transformed and 'transformed_keypoints' in results:
             gt_instances.set_field(results['transformed_keypoints'],
                                    'transformed_keypoints')
-        if self.pack_transformed and \
-                'transformed_keypoints_visible' in results:
-            gt_instances.set_field(results['transformed_keypoints_visible'],
-                                   'transformed_keypoints_visible')
 
         data_sample.gt_instances = gt_instances
 
@@ -209,9 +203,9 @@ class PackPoseInputs(BaseTransform):
         for key, packed_key in self.label_mapping_table.items():
             if key in results:
                 # For pose-lifting, store only target-related fields
-                if 'lifting_target_label' in results and key in {
+                if 'lifting_target' in results and packed_key in {
                         'keypoint_labels', 'keypoint_weights',
-                        'transformed_keypoints_visible'
+                        'keypoints_visible'
                 }:
                     continue
                 if isinstance(results[key], list):
