@@ -10,6 +10,9 @@ import mmcv
 import mmengine
 import numpy as np
 
+# In case there's no screen on the device
+import matplotlib
+matplotlib.use('Agg')
 
 # Verify
 from deepface import DeepFace
