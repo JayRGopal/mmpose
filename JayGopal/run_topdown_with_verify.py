@@ -14,8 +14,9 @@ import numpy as np
 # Verify
 from deepface import DeepFace
 import sys
-cwd=os.getcwd()
-sys.path.append(os.path.join(cwd, "../.."))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(script_dir, '../..'))
+sys.path.append(parent_dir)
 from utilsVerify import *
 
 # Pose tracking imports
@@ -32,7 +33,6 @@ try:
 except (ImportError, ModuleNotFoundError):
     has_mmdet = False
 
-
 def process_one_image(args,
                       img,
                       detector,
@@ -40,7 +40,7 @@ def process_one_image(args,
                       target_face_path,
                       visualizer=None,
                       show_interval=0,
-                      face_conf_thresh=0.9):
+                      face_conf_thresh=0.7):
     """Visualize predicted keypoints (and heatmaps) of one image."""
     # Face confidence mus tbe 
 
@@ -64,12 +64,12 @@ def process_one_image(args,
 
     # verify via deepface if >1 confident face landmarks
     num_ppl = len(pose_results)
-    if num_ppl >= 1:
+    if num_ppl >= 1 and not(args.debug):
         face_confidences = avg_face_conf_body_2d(pose_results)
         num_people_above_threshold = np.sum(face_confidences >= face_conf_thresh)
+        above_threshold_indices = np.where(face_confidences >= face_conf_thresh)[0]
         if num_people_above_threshold > 1:
             # Case: >1 confident face in frame
-            above_threshold_indices = np.where(face_confidences >= face_conf_thresh)[0]
             extracted = [pose_results[i] for i in above_threshold_indices]
             target_face_path
             result = verify_one_face_np_data(target_face_path, img)
@@ -77,8 +77,12 @@ def process_one_image(args,
                 data_samples = merge_data_samples([])
             else:
                 face_x, face_y, face_w, face_h = result
-                # TODO: Given verified bbox and pose_results list, get the "closest" based on face landmarks
-                
+                face_center_x = face_x + (face_w / 2)
+                face_center_y = face_y + (face_h / 2) 
+                all_nose_coords = get_nose_coords_body_2d(extracted)
+                correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords)
+                new_pose_results = [extracted[correct_person_index]]
+                data_samples = merge_data_samples(new_pose_results)
         elif num_people_above_threshold == 1:
             # Case: 1 confident face in frame 
             extracted = [pose_results[i] for i in above_threshold_indices]
@@ -88,11 +92,10 @@ def process_one_image(args,
             data_samples = merge_data_samples([])
 
     else:
-        data_samples = merge_data_samples([])
+        data_samples = merge_data_samples(pose_results)
     
     
     # show the results
-
     if visualizer is not None:
         visualizer.add_datasample(
             'result',
@@ -146,6 +149,11 @@ def main():
         default=False,
         help='whether to save predicted results')
     parser.add_argument(
+        '--debug',
+        action='store_true',
+        default=False,
+        help='whether to show ALL poses for debugging purposes')
+    parser.add_argument(
         '--device', default='cuda:0', help='Device used for inference')
     parser.add_argument(
         '--det-cat-id',
@@ -173,7 +181,7 @@ def main():
         default=False,
         help='Draw heatmap predicted by the model')
     parser.add_argument(
-        '--target_face_path',
+        '--target-face-path',
         type=str,
         default='',
         help='Path to the target image with out patient for verification') 
@@ -262,7 +270,7 @@ def main():
 
         # inference
         pred_instances = process_one_image(args, args.input, detector,
-                                           pose_estimator, target_face_path, visualizer)
+                                           pose_estimator, args.target_face_path, visualizer=visualizer)
 
         if args.save_predictions:
             pred_instances_list = split_instances(pred_instances)
@@ -290,9 +298,14 @@ def main():
                 break
 
             # topdown pose estimation
+            # TODO: Add downsampling of frames
+
+
+
             pred_instances = process_one_image(args, frame, detector,
-                                               pose_estimator, visualizer,
-                                               0.001)
+                                               pose_estimator, args.target_face_path, 
+                                               visualizer=visualizer,
+                                               show_interval=0.001)
 
             if args.save_predictions:
                 # save prediction results
@@ -313,8 +326,12 @@ def main():
                         fourcc,
                         30,  # saved fps
                         (frame_vis.shape[1], frame_vis.shape[0]))
-
+                
                 video_writer.write(mmcv.rgb2bgr(frame_vis))
+
+
+
+
 
             # press ESC to exit
             if cv2.waitKey(5) & 0xFF == 27:
