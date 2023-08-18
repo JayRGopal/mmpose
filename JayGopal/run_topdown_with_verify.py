@@ -36,6 +36,8 @@ try:
 except (ImportError, ModuleNotFoundError):
     has_mmdet = False
 
+import pdb; pdb.set_trace()
+
 def process_one_image(args,
                       img,
                       detector,
@@ -241,11 +243,13 @@ def main():
         args.pred_save_path = f'{args.output_root}/results_' \
             f'{os.path.splitext(os.path.basename(args.input))[0]}.json'
 
+    import pdb; pdb.set_trace()
     # build detector
     detector = init_detector(
         args.det_config, args.det_checkpoint, device=args.device)
     detector.cfg = adapt_mmdet_pipeline(detector.cfg)
 
+    import pdb; pdb.set_trace()
     # build pose estimator
     pose_estimator = init_pose_estimator(
         args.pose_config,
@@ -254,6 +258,7 @@ def main():
         cfg_options=dict(
             model=dict(test_cfg=dict(output_heatmaps=args.draw_heatmap))))
 
+    import pdb; pdb.set_trace()
     # build visualizer
     pose_estimator.cfg.visualizer.radius = args.radius
     pose_estimator.cfg.visualizer.alpha = args.alpha
@@ -264,6 +269,7 @@ def main():
     visualizer.set_dataset_meta(
         pose_estimator.dataset_meta, skeleton_style=args.skeleton_style)
 
+    import pdb; pdb.set_trace()
     if args.input == 'webcam':
         input_type = 'webcam'
     else:
@@ -303,13 +309,14 @@ def main():
             # topdown pose estimation
             # TODO: Add downsampling of frames
 
-
+            import pdb; pdb.set_trace()
 
             pred_instances = process_one_image(args, frame, detector,
                                                pose_estimator, args.target_face_path, 
                                                visualizer=visualizer,
                                                show_interval=0.001)
 
+            import pdb; pdb.set_trace()
             if args.save_predictions:
                 # save prediction results
                 pred_instances_list.append(
@@ -318,8 +325,9 @@ def main():
                         instances=split_instances(pred_instances)))
 
             if output_file:
+                import pdb; pdb.set_trace()
                 frame_vis = visualizer.get_image()
-
+                import pdb; pdb.set_trace()
                 if video_writer is None:
                     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                     # the size of the image with visualization may vary
@@ -331,6 +339,7 @@ def main():
                         (frame_vis.shape[1], frame_vis.shape[0]))
                 
                 video_writer.write(mmcv.rgb2bgr(frame_vis))
+                import pdb; pdb.set_trace()
 
 
 
