@@ -45,7 +45,8 @@ def process_one_image(args,
                       target_face_path,
                       visualizer=None,
                       show_interval=0,
-                      face_conf_thresh=0.7):
+                      face_conf_thresh=0.7,
+                      verifyAll=False):
     """Visualize predicted keypoints (and heatmaps) of one image."""
     # Face confidence mus tbe 
 
@@ -73,10 +74,9 @@ def process_one_image(args,
         face_confidences = avg_face_conf_body_2d(pose_results)
         num_people_above_threshold = np.sum(face_confidences >= face_conf_thresh)
         above_threshold_indices = np.where(face_confidences >= face_conf_thresh)[0]
-        if num_people_above_threshold > 1:
+        if (num_people_above_threshold > 1) or verifyAll:
             # Case: >1 confident face in frame
             extracted = [pose_results[i] for i in above_threshold_indices]
-            target_face_path
             result = verify_one_face_np_data(target_face_path, img)
             if result is None:
                 data_samples = merge_data_samples([])
@@ -84,9 +84,12 @@ def process_one_image(args,
                 face_x, face_y, face_w, face_h = result
                 face_center_x = face_x + (face_w / 2)
                 face_center_y = face_y + (face_h / 2) 
-                all_nose_coords = get_nose_coords_body_2d(extracted)
-                correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords)
-                new_pose_results = [extracted[correct_person_index]]
+                if (num_people_above_threshold >= 1):
+                    all_nose_coords = get_nose_coords_body_2d(extracted)
+                    correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords)
+                    new_pose_results = [extracted[correct_person_index]]
+                else:
+                    new_pose_results = []
                 data_samples = merge_data_samples(new_pose_results)
         elif num_people_above_threshold == 1:
             # Case: 1 confident face in frame 
@@ -191,6 +194,11 @@ def main():
         default='',
         help='Path to the target image with out patient for verification') 
     parser.add_argument(
+        '--verifyAll',
+        action='store_true',
+        default=False,
+        help='Whether to verify every single frame (slower, but more robust)')
+    parser.add_argument(
         '--show-kpt-idx',
         action='store_true',
         default=False,
@@ -279,7 +287,8 @@ def main():
 
         # inference
         pred_instances = process_one_image(args, args.input, detector,
-                                           pose_estimator, args.target_face_path, visualizer=visualizer)
+                                           pose_estimator, args.target_face_path, visualizer=visualizer,
+                                           verifyAll=args.verifyAll)
 
         if args.save_predictions:
             pred_instances_list = split_instances(pred_instances)
@@ -314,7 +323,8 @@ def main():
             pred_instances = process_one_image(args, frame, detector,
                                                pose_estimator, args.target_face_path, 
                                                visualizer=visualizer,
-                                               show_interval=0.001)
+                                               show_interval=0.001,
+                                               verifyAll=args.verifyAll)
 
             
             if args.save_predictions:
