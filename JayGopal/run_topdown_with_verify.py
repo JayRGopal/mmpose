@@ -87,7 +87,10 @@ def process_one_image(args,
                 if (num_people_above_threshold >= 1):
                     all_nose_coords = get_nose_coords_body_2d(extracted)
                     correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords)
-                    new_pose_results = [extracted[correct_person_index]]
+                    if correct_person_index == -1:
+                        new_pose_results = []
+                    else:
+                        new_pose_results = [extracted[correct_person_index]]
                 else:
                     new_pose_results = []
                 data_samples = merge_data_samples(new_pose_results)
