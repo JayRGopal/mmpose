@@ -48,7 +48,12 @@ def process_one_image(args,
                       face_conf_thresh=0.7,
                       verifyAll=False):
     """Visualize predicted keypoints (and heatmaps) of one image."""
-    # Face confidence mus tbe 
+
+    # Is this frame valid? It is not valid if:
+    # 1 - no poses detected with sufficient confidence
+    # 2 - one pose, but verified and wasn't the target face
+    # 3 - multiple poses, but verified and none were the target face
+    is_valid = True
 
     # predict bbox
     det_result = inference_detector(detector, img)
@@ -70,6 +75,7 @@ def process_one_image(args,
 
     # verify via deepface if >1 confident face landmarks
     num_ppl = len(pose_results)
+    final_num_ppl = num_ppl # final number of people after thresholding & verificaiton (to be updated below)
     if num_ppl >= 1 and not(args.debug):
         face_confidences = avg_face_conf_body_2d(pose_results)
         num_people_above_threshold = np.sum(face_confidences >= face_conf_thresh)
@@ -79,6 +85,7 @@ def process_one_image(args,
             extracted = [pose_results[i] for i in above_threshold_indices]
             result = verify_one_face_np_data(target_face_path, img)
             if result is None:
+                final_num_ppl = 0
                 data_samples = merge_data_samples([])
             else:
                 face_x, face_y, face_w, face_h = result
@@ -88,30 +95,43 @@ def process_one_image(args,
                     all_nose_coords = get_nose_coords_body_2d(extracted)
                     correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords)
                     if correct_person_index == -1:
+                        final_num_ppl = 0
                         new_pose_results = []
                     else:
+                        final_num_ppl = 1
                         new_pose_results = [extracted[correct_person_index]]
                 else:
+                    final_num_ppl = 0
                     new_pose_results = []
                 data_samples = merge_data_samples(new_pose_results)
         elif num_people_above_threshold == 1:
             # Case: 1 confident face in frame 
             extracted = [pose_results[i] for i in above_threshold_indices]
+            final_num_ppl = 1
             data_samples = merge_data_samples(extracted)
         elif num_people_above_threshold == 0: 
             # Case: no confident faces in frame
+            final_num_ppl = 0
             data_samples = merge_data_samples([])
 
     else:
         data_samples = merge_data_samples(pose_results)
     
+    if final_num_ppl == 0:
+        # If we end up with no people, revert back to original preds for visualizer
+        data_samples_vis = merge_data_samples(pose_results)
+
+        # also, mark this frame as invalid
+        is_valid = False
+    else:
+        data_samples_vis = data_samples
     
     # show the results
     if visualizer is not None:
         visualizer.add_datasample(
             'result',
             img,
-            data_sample=data_samples,
+            data_sample=data_samples_vis,
             draw_gt=False,
             draw_heatmap=args.draw_heatmap,
             draw_bbox=args.draw_bbox,
@@ -122,7 +142,7 @@ def process_one_image(args,
             kpt_thr=args.kpt_thr)
 
     # if there is no instance detected, return None
-    return data_samples.get('pred_instances', None)
+    return data_samples.get('pred_instances', None), is_valid
 
 
 def main():
@@ -289,7 +309,7 @@ def main():
     if input_type == 'image':
 
         # inference
-        pred_instances = process_one_image(args, args.input, detector,
+        pred_instances, is_valid = process_one_image(args, args.input, detector,
                                            pose_estimator, args.target_face_path, visualizer=visualizer,
                                            verifyAll=args.verifyAll)
 
@@ -323,7 +343,7 @@ def main():
 
             
 
-            pred_instances = process_one_image(args, frame, detector,
+            pred_instances, is_valid = process_one_image(args, frame, detector,
                                                pose_estimator, args.target_face_path, 
                                                visualizer=visualizer,
                                                show_interval=0.001,
@@ -351,6 +371,22 @@ def main():
                         30,  # saved fps
                         (frame_vis.shape[1], frame_vis.shape[0]))
                 
+                # Check if the frame is valid or not
+                if not is_valid:
+                    # Add "SKIPPED" text in bold red letters
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    top_left_corner_of_text = (10, 90)
+                    font_scale = 2
+                    font_color = (255, 0, 0)  # Red color in RGB
+                    line_type = 3
+                    cv2.putText(frame_vis, 'SKIPPED',
+                                top_left_corner_of_text,
+                                font,
+                                font_scale,
+                                font_color,
+                                line_type)
+                
+
                 video_writer.write(mmcv.rgb2bgr(frame_vis))
                 
 
