@@ -83,9 +83,11 @@ def process_one_image(args,
         if (num_people_above_threshold > 1) or verifyAll:
             # Case: >1 confident face in frame
             extracted = [pose_results[i] for i in above_threshold_indices]
-            result = verify_one_face_np_data(target_face_path, img)
+            result = verify_one_face_folder_np_data(target_face_path, img)
             if result is None:
                 final_num_ppl = 0
+                fail_reason = "Verification can't locate target"
+                print(f"FAILED FRAME: {fail_reason}")
                 data_samples = merge_data_samples([])
             else:
                 face_x, face_y, face_w, face_h = result
@@ -96,12 +98,16 @@ def process_one_image(args,
                     correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords)
                     if correct_person_index == -1:
                         final_num_ppl = 0
+                        fail_reason = "No pose close enough to verified target face"
+                        print(f"FAILED FRAME: {fail_reason}")
                         new_pose_results = []
                     else:
                         final_num_ppl = 1
                         new_pose_results = [extracted[correct_person_index]]
                 else:
                     final_num_ppl = 0
+                    fail_reason = "Zero poses confidently detected"
+                    print(f"FAILED FRAME: {fail_reason}")
                     new_pose_results = []
                 data_samples = merge_data_samples(new_pose_results)
         elif num_people_above_threshold == 1:
@@ -112,6 +118,8 @@ def process_one_image(args,
         elif num_people_above_threshold == 0: 
             # Case: no confident faces in frame
             final_num_ppl = 0
+            fail_reason = "Zero poses confidently detected"
+            print(f"FAILED FRAME: {fail_reason}")
             data_samples = merge_data_samples([])
 
     else:
@@ -215,7 +223,7 @@ def main():
         '--target-face-path',
         type=str,
         default='',
-        help='Path to the target image with out patient for verification') 
+        help='Path to the target image FOLDER with out patient for verification') 
     parser.add_argument(
         '--verifyAll',
         action='store_true',
