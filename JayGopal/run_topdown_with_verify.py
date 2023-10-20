@@ -46,7 +46,8 @@ def process_one_image(args,
                       visualizer=None,
                       show_interval=0,
                       face_conf_thresh=0.7,
-                      verifyAll=False):
+                      verifyAll=False,
+                      verify_distance_threshold=50):
     """Visualize predicted keypoints (and heatmaps) of one image."""
 
     # Is this frame valid? It is not valid if:
@@ -95,7 +96,8 @@ def process_one_image(args,
                 face_center_y = face_y + (face_h / 2) 
                 if (num_people_above_threshold >= 1):
                     all_nose_coords = get_nose_coords_body_2d(extracted)
-                    correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords)
+                    correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords,
+                                                                threshold=verify_distance_threshold)
                     if correct_person_index == -1:
                         final_num_ppl = 0
                         fail_reason = "No pose close enough to verified target face"
@@ -246,6 +248,11 @@ def main():
         default=3,
         help='Keypoint radius for visualization')
     parser.add_argument(
+        '--verify-distance-threshold',
+        type=int,
+        default=50,
+        help='Threshold distance for verification')
+    parser.add_argument(
         '--thickness',
         type=int,
         default=1,
@@ -319,7 +326,8 @@ def main():
         # inference
         pred_instances, is_valid = process_one_image(args, args.input, detector,
                                            pose_estimator, args.target_face_path, visualizer=visualizer,
-                                           verifyAll=args.verifyAll)
+                                           verifyAll=args.verifyAll,
+                                           verify_distance_threshold=args.verify_distance_threshold)
 
         if args.save_predictions:
             pred_instances_list = split_instances(pred_instances)
