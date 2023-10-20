@@ -47,7 +47,8 @@ def process_one_image(args,
                       show_interval=0,
                       face_conf_thresh=0.7,
                       verifyAll=False,
-                      verify_distance_threshold=50):
+                      verify_distance_threshold=50,
+                      print_mins=True):
     """Visualize predicted keypoints (and heatmaps) of one image."""
 
     # Is this frame valid? It is not valid if:
@@ -97,7 +98,7 @@ def process_one_image(args,
                 if (num_people_above_threshold >= 1):
                     all_nose_coords = get_nose_coords_body_2d(extracted)
                     correct_person_index = closest_person_index(face_center_x, face_center_y, all_nose_coords,
-                                                                threshold=verify_distance_threshold)
+                                                                threshold=verify_distance_threshold, printMins=print_mins)
                     if correct_person_index == -1:
                         final_num_ppl = 0
                         fail_reason = "No pose close enough to verified target face"
@@ -253,6 +254,11 @@ def main():
         default=50,
         help='Threshold distance for verification')
     parser.add_argument(
+        '--print-mins',
+        action='store_true',
+        default=False,
+        help='Print minimum distance pose to verified face in each frame')
+    parser.add_argument(
         '--thickness',
         type=int,
         default=1,
@@ -327,7 +333,8 @@ def main():
         pred_instances, is_valid = process_one_image(args, args.input, detector,
                                            pose_estimator, args.target_face_path, visualizer=visualizer,
                                            verifyAll=args.verifyAll,
-                                           verify_distance_threshold=args.verify_distance_threshold)
+                                           verify_distance_threshold=args.verify_distance_threshold,
+                                           print_mins=args.print_mins)
 
         if args.save_predictions:
             pred_instances_list = split_instances(pred_instances)
@@ -363,7 +370,9 @@ def main():
                                                pose_estimator, args.target_face_path, 
                                                visualizer=visualizer,
                                                show_interval=0.001,
-                                               verifyAll=args.verifyAll)
+                                               verifyAll=args.verifyAll,
+                                               verify_distance_threshold=args.verify_distance_threshold,
+                                               print_mins=args.print_mins)
 
             
             if args.save_predictions:
