@@ -340,7 +340,7 @@ class RandomHalfBody(BaseTransform):
 
         Args:
             keypoints_visible (np.ndarray, optional): The visibility of
-                keypoints in shape (N, K, 1).
+                keypoints in shape (N, K, 1) or (N, K, 2).
             upper_body_ids (list): The list of upper body keypoint indices
             lower_body_ids (list): The list of lower body keypoint indices
 
@@ -348,6 +348,9 @@ class RandomHalfBody(BaseTransform):
             list[list[int] | None]: The selected half-body keypoint indices
             of each instance. ``None`` means not applying half-body transform.
         """
+
+        if keypoints_visible.ndim == 3:
+            keypoints_visible = keypoints_visible[..., 0]
 
         half_body_ids = []
 
@@ -390,7 +393,6 @@ class RandomHalfBody(BaseTransform):
         Returns:
             dict: The result dict.
         """
-
         half_body_ids = self._random_select_half_body(
             keypoints_visible=results['keypoints_visible'],
             upper_body_ids=results['upper_body_ids'],
@@ -649,6 +651,8 @@ class Albumentation(BaseTransform):
                     f'{obj_type} is not pixel-level transformations. '
                     'Please use with caution.')
             obj_cls = getattr(albumentations, obj_type)
+        elif isinstance(obj_type, type):
+            obj_cls = obj_type
         else:
             raise TypeError(f'type must be a str, but got {type(obj_type)}')
 
@@ -950,6 +954,10 @@ class GenerateTarget(BaseTransform):
                 ' \'keypoints\' in the results.')
 
         keypoints_visible = results['keypoints_visible']
+        if keypoints_visible.ndim == 3 and keypoints_visible.shape[2] == 2:
+            keypoints_visible, keypoints_visible_weights = \
+                keypoints_visible[..., 0], keypoints_visible[..., 1]
+            results['keypoints_visible_weights'] = keypoints_visible_weights
 
         # Encoded items from the encoder(s) will be updated into the results.
         # Please refer to the document of the specific codec for details about

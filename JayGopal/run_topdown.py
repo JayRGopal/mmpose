@@ -10,6 +10,13 @@ import mmcv
 import mmengine
 import numpy as np
 
+# # Face detection imports
+# import sys
+# cwd=os.getcwd()
+# sys.path.append(os.path.join(cwd, "../.."))
+# from utilsHSE import *
+
+# Pose tracking imports
 from mmpose.apis import inference_topdown
 from mmpose.apis import init_model as init_pose_estimator
 from mmpose.evaluation.functional import nms

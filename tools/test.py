@@ -51,7 +51,14 @@ def parse_args():
         choices=['none', 'pytorch', 'slurm', 'mpi'],
         default='none',
         help='job launcher')
-    parser.add_argument('--local_rank', type=int, default=0)
+    # When using PyTorch version >= 2.0.0, the `torch.distributed.launch`
+    # will pass the `--local-rank` parameter to `tools/test.py` instead
+    # of `--local_rank`.
+    parser.add_argument('--local_rank', '--local-rank', type=int, default=0)
+    parser.add_argument(
+        '--badcase',
+        action='store_true',
+        help='whether analyze badcase in test')
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -60,19 +67,59 @@ def parse_args():
 
 def merge_args(cfg, args):
     """Merge CLI arguments to config."""
+
+    cfg.launcher = args.launcher
+    cfg.load_from = args.checkpoint
+
+    # -------------------- work directory --------------------
+    # work_dir is determined in this priority: CLI > segment in file > filename
+    if args.work_dir is not None:
+        # update configs according to CLI args if args.work_dir is not None
+        cfg.work_dir = args.work_dir
+    elif cfg.get('work_dir', None) is None:
+        # use config filename as default work_dir if cfg.work_dir is None
+        cfg.work_dir = osp.join('./work_dirs',
+                                osp.splitext(osp.basename(args.config))[0])
+
     # -------------------- visualization --------------------
-    if args.show or (args.show_dir is not None):
+    if (args.show and not args.badcase) or (args.show_dir is not None):
         assert 'visualization' in cfg.default_hooks, \
             'PoseVisualizationHook is not set in the ' \
             '`default_hooks` field of config. Please set ' \
             '`visualization=dict(type="PoseVisualizationHook")`'
 
         cfg.default_hooks.visualization.enable = True
-        cfg.default_hooks.visualization.show = args.show
+        cfg.default_hooks.visualization.show = False \
+            if args.badcase else args.show
         if args.show:
             cfg.default_hooks.visualization.wait_time = args.wait_time
         cfg.default_hooks.visualization.out_dir = args.show_dir
         cfg.default_hooks.visualization.interval = args.interval
+
+    # -------------------- badcase analyze --------------------
+    if args.badcase:
+        assert 'badcase' in cfg.default_hooks, \
+            'BadcaseAnalyzeHook is not set in the ' \
+            '`default_hooks` field of config. Please set ' \
+            '`badcase=dict(type="BadcaseAnalyzeHook")`'
+
+        cfg.default_hooks.badcase.enable = True
+        cfg.default_hooks.badcase.show = args.show
+        if args.show:
+            cfg.default_hooks.badcase.wait_time = args.wait_time
+        cfg.default_hooks.badcase.interval = args.interval
+
+        metric_type = cfg.default_hooks.badcase.get('metric_type', 'loss')
+        if metric_type not in ['loss', 'accuracy']:
+            raise ValueError('Only support badcase metric type'
+                             "in ['loss', 'accuracy']")
+
+        if metric_type == 'loss':
+            if not cfg.default_hooks.badcase.get('metric'):
+                cfg.default_hooks.badcase.metric = cfg.model.head.loss
+        else:
+            if not cfg.default_hooks.badcase.get('metric'):
+                cfg.default_hooks.badcase.metric = cfg.test_evaluator
 
     # -------------------- Dump predictions --------------------
     if args.dump is not None:
@@ -80,9 +127,13 @@ def merge_args(cfg, args):
             'The dump file must be a pkl file.'
         dump_metric = dict(type='DumpResults', out_file_path=args.dump)
         if isinstance(cfg.test_evaluator, (list, tuple)):
-            cfg.test_evaluator = list(cfg.test_evaluator).append(dump_metric)
+            cfg.test_evaluator = [*cfg.test_evaluator, dump_metric]
         else:
             cfg.test_evaluator = [cfg.test_evaluator, dump_metric]
+
+    # -------------------- Other arguments --------------------
+    if args.cfg_options is not None:
+        cfg.merge_from_dict(args.cfg_options)
 
     return cfg
 
@@ -93,20 +144,6 @@ def main():
     # load config
     cfg = Config.fromfile(args.config)
     cfg = merge_args(cfg, args)
-    cfg.launcher = args.launcher
-    if args.cfg_options is not None:
-        cfg.merge_from_dict(args.cfg_options)
-
-    # work_dir is determined in this priority: CLI > segment in file > filename
-    if args.work_dir is not None:
-        # update configs according to CLI args if args.work_dir is not None
-        cfg.work_dir = args.work_dir
-    elif cfg.get('work_dir', None) is None:
-        # use config filename as default work_dir if cfg.work_dir is None
-        cfg.work_dir = osp.join('./work_dirs',
-                                osp.splitext(osp.basename(args.config))[0])
-
-    cfg.load_from = args.checkpoint
 
     # build the runner from config
     runner = Runner.from_cfg(cfg)

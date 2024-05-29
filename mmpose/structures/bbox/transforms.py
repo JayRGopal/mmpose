@@ -111,7 +111,7 @@ def bbox_xywh2cs(bbox: np.ndarray,
 def bbox_cs2xyxy(center: np.ndarray,
                  scale: np.ndarray,
                  padding: float = 1.) -> np.ndarray:
-    """Transform the bbox format from (center, scale) to (x,y,w,h).
+    """Transform the bbox format from (center, scale) to (x1,y1,x2,y2).
 
     Args:
         center (ndarray): BBox center (x, y) in shape (2,) or (n, 2)
@@ -120,7 +120,7 @@ def bbox_cs2xyxy(center: np.ndarray,
             Default: 1.0
 
     Returns:
-        ndarray[float32]: BBox (x, y, w, h) in shape (4, ) or (n, 4)
+        ndarray[float32]: BBox (x1, y1, x2, y2) in shape (4, ) or (n, 4)
     """
 
     dim = center.ndim
@@ -209,17 +209,19 @@ def flip_bbox(bbox: np.ndarray,
         if bbox_format == 'xywh' or bbox_format == 'center':
             bbox_flipped[..., 0] = w - bbox[..., 0] - 1
         elif bbox_format == 'xyxy':
-            bbox_flipped[..., ::2] = w - bbox[..., ::2] - 1
+            bbox_flipped[..., ::2] = w - bbox[..., -2::-2] - 1
     elif direction == 'vertical':
         if bbox_format == 'xywh' or bbox_format == 'center':
             bbox_flipped[..., 1] = h - bbox[..., 1] - 1
         elif bbox_format == 'xyxy':
-            bbox_flipped[..., 1::2] = h - bbox[..., 1::2] - 1
+            bbox_flipped[..., 1::2] = h - bbox[..., ::-2] - 1
     elif direction == 'diagonal':
         if bbox_format == 'xywh' or bbox_format == 'center':
             bbox_flipped[..., :2] = [w, h] - bbox[..., :2] - 1
         elif bbox_format == 'xyxy':
             bbox_flipped[...] = [w, h, w, h] - bbox - 1
+            bbox_flipped = np.concatenate(
+                (bbox_flipped[..., 2:], bbox_flipped[..., :2]), axis=-1)
 
     return bbox_flipped
 

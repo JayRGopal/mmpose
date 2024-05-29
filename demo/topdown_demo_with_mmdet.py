@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import logging
 import mimetypes
 import os
 import time
@@ -9,6 +10,7 @@ import json_tricks as json
 import mmcv
 import mmengine
 import numpy as np
+from mmengine.logging import print_log
 
 from mmpose.apis import inference_topdown
 from mmpose.apis import init_model as init_pose_estimator
@@ -242,11 +244,28 @@ def main():
                         frame_id=frame_idx,
                         instances=split_instances(pred_instances)))
 
-            # press ESC to exit
-            if cv2.waitKey(5) & 0xFF == 27:
-                break
+            # output videos
+            if output_file:
+                frame_vis = visualizer.get_image()
 
-            time.sleep(args.show_interval)
+                if video_writer is None:
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    # the size of the image with visualization may vary
+                    # depending on the presence of heatmaps
+                    video_writer = cv2.VideoWriter(
+                        output_file,
+                        fourcc,
+                        25,  # saved fps
+                        (frame_vis.shape[1], frame_vis.shape[0]))
+
+                video_writer.write(mmcv.rgb2bgr(frame_vis))
+
+            if args.show:
+                # press ESC to exit
+                if cv2.waitKey(5) & 0xFF == 27:
+                    break
+
+                time.sleep(args.show_interval)
 
         if video_writer:
             video_writer.release()
@@ -267,6 +286,13 @@ def main():
                 f,
                 indent='\t')
         print(f'predictions have been saved at {args.pred_save_path}')
+
+    if output_file:
+        input_type = input_type.replace('webcam', 'video')
+        print_log(
+            f'the output {input_type} has been saved at {output_file}',
+            logger='current',
+            level=logging.INFO)
 
 
 if __name__ == '__main__':
